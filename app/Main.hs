@@ -6,6 +6,7 @@ import Lib
 import Codec.Xlsx
 import Control.Lens
 import qualified Data.ByteString.Lazy as L
+import qualified Data.List as LS
 import Data.Maybe
 import Protolude
 
@@ -20,6 +21,9 @@ newtype Ampere = Ampere Double deriving (Eq, Show)
 newtype M_Ampere = M_Ampere Double deriving (Eq, Show)
 newtype Wpm2 = Wpm2 Double deriving (Eq, Show)
 newtype OhmCm2 = OhmCm2 Double deriving (Eq, Show)
+newtype Celsius = Celsius Double deriving (Eq, Show)
+newtype Kelvin = Kelvin Double deriving (Eq, Show)
+newtype Cm2 = Cm2 Double deriving (Eq, Show)
 
 fromMiliAmp :: M_Ampere -> Ampere
 fromMiliAmp (M_Ampere value) = Ampere $ value / 1000
@@ -29,6 +33,9 @@ fromMiliVolt (M_Volt value) = Volt $ value / 1000
 
 fromMiliAmpPerCm2 :: M_Apcm2 -> Apcm2
 fromMiliAmpPerCm2 (M_Apcm2 v) = Apcm2 $ v / 1000
+
+toKelvin :: Celsius -> Kelvin
+toKelvin (Celsius v) = Kelvin (v + 273.15)
 
 data SheetHeader = SheetHeader
     { name :: Text
@@ -105,17 +112,49 @@ getHeaderInfo sheet = do name <- getCellNr 1 >>= tryCellText
         getCellNr :: Int -> Maybe CellValue
         getCellNr col = sheet ^? ixCell (35, col) . cellValue . _Just
 
+getCellValue :: Worksheet -> Int -> Int -> Maybe CellValue
+getCellValue sheet line col = sheet ^? ixCell (line, col) . cellValue . _Just
+
+getArea :: Worksheet -> Maybe Cm2
+getArea sheet = let cell = getCellValue sheet 5 1 in
+                    cell >>= tryConvertCell Cm2
+
+getTemperature :: Worksheet -> Maybe Kelvin
+getTemperature sheet = do cell <- sheet ^? ixCell (26, 1) . cellValue . _Just
+                          converted <- tryConvertCell Celsius cell
+                          pure $ toKelvin converted
+
+getCol :: Int -> Int -> (CellValue -> Maybe a) -> Worksheet -> [a]
+getCol col start end sheet = accumulate col start end sheet []
+  where
+      accumulate :: Int -> Int -> (CellValue -> Maybe a) -> Worksheet -> [a] -> [a]
+      accumulate col index end sheet acc = case getCellValue sheet index col >>= end of
+                                             Nothing -> acc
+                                             Just v -> accumulate col (index + 1) end sheet (v : acc)
+
+getI :: Worksheet -> [Ampere]
+getI = getCol 4 38 (tryConvertCell Ampere)
+
+getV :: Worksheet -> [Volt]
+getV = getCol 5 38 (tryConvertCell Volt)
+
 getHeaderInfo' :: Worksheet -> [Maybe CellValue]
 getHeaderInfo' sheet = map getCellNr [1,2,3,4,5,6,7,8,9,10,11]
   where
       getCellNr :: Int -> Maybe CellValue
       getCellNr col = sheet ^? ixCell (34,col) . cellValue . _Just
 
+getWorksheets :: Xlsx -> [Worksheet]
+getWorksheets doc = map snd (_xlSheets doc)
+
 getHeaders :: Xlsx -> [SheetHeader]
 getHeaders doc = mapMaybe (getHeaderInfo . snd) (_xlSheets doc)
 
 main :: IO ()
 main = do file <- getFile
-          let headers = getHeaders file
-          mapM_ print headers
+          let sheets = getWorksheets file
+          let headers = mapMaybe getHeaderInfo sheets
+          let volts = map getV sheets
+          putStrLn . (show :: Int -> Text) . length $ volts LS.!! 1
+          --mapM_ print headers
           
