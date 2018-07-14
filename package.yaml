@@ -24,6 +24,7 @@ dependencies:
 - xlsx
 - lens
 - bytestring
+- protolude
 
 library:
   source-dirs: src
