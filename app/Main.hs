@@ -164,6 +164,8 @@ main = do file <- getFile
           let i_sun = map getI sheets
           let v_sun = map getV sheets
           let j_sin = getJsin $ sheets LS.!! 0
+          let isc = map iscSI headers
+          let voc = map vocSI headers
           print $ j_sin
           --mapM_ print headers
           
