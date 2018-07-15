@@ -37,6 +37,9 @@ fromMiliAmpPerCm2 (M_Apcm2 v) = Apcm2 $ v / 1000
 toKelvin :: Celsius -> Kelvin
 toKelvin (Celsius v) = Kelvin (v + 273.15)
 
+divideByArea :: Ampere -> Cm2 -> Apcm2
+divideByArea (Ampere a) (Cm2 area) = Apcm2 (a / area)
+
 data SheetHeader = SheetHeader
     { name :: Text
     , eff :: Double
@@ -116,11 +119,11 @@ getCellValue :: Worksheet -> Int -> Int -> Maybe CellValue
 getCellValue sheet line col = sheet ^? ixCell (line, col) . cellValue . _Just
 
 getArea :: Worksheet -> Maybe Cm2
-getArea sheet = let cell = getCellValue sheet 5 1 in
+getArea sheet = let cell = getCellValue sheet 6 2 in
                     cell >>= tryConvertCell Cm2
 
 getTemperature :: Worksheet -> Maybe Kelvin
-getTemperature sheet = do cell <- sheet ^? ixCell (26, 1) . cellValue . _Just
+getTemperature sheet = do cell <- sheet ^? ixCell (27, 2) . cellValue . _Just
                           converted <- tryConvertCell Celsius cell
                           pure $ toKelvin converted
 
@@ -150,11 +153,17 @@ getWorksheets doc = map snd (_xlSheets doc)
 getHeaders :: Xlsx -> [SheetHeader]
 getHeaders doc = mapMaybe (getHeaderInfo . snd) (_xlSheets doc)
 
+getJsin :: Worksheet -> [Apcm2]
+getJsin sheet = let area = fromJust . getArea $ sheet in
+                    map (`divideByArea` area) $ getI sheet
+
 main :: IO ()
 main = do file <- getFile
           let sheets = getWorksheets file
           let headers = mapMaybe getHeaderInfo sheets
-          let volts = map getV sheets
-          putStrLn . (show :: Int -> Text) . length $ volts LS.!! 1
+          let i_sun = map getI sheets
+          let v_sun = map getV sheets
+          let j_sin = getJsin $ sheets LS.!! 0
+          print $ j_sin
           --mapM_ print headers
           
